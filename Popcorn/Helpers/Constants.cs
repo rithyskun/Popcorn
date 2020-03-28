@@ -14,13 +14,13 @@ namespace Popcorn.Helpers
         /// <summary>
         /// App version
         /// </summary>
-        public const string AppVersion = "1.0.2";
+        public const string AppVersion = "1.0.3";
 
         /// <summary>
         /// Copyright
         /// </summary>
         public static readonly string Copyright = "Copyright Popcorn © 2019-" + DateTime.Now.Year;
-        
+
         /// <summary>
         /// Client ID for TMDb
         /// </summary>
@@ -77,11 +77,6 @@ namespace Popcorn.Helpers
         /// The maximum number of shows per page to load from the API
         /// </summary>
         public const int MaxShowsPerPage = 20;
-
-        /// <summary>
-        /// Url of the server updates
-        /// </summary>
-        public const string GithubRepository = "https://github.com/bbougot/Popcorn";
 
         /// <summary>
         /// Default request timeout

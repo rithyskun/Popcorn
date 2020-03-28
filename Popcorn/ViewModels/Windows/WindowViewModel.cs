@@ -84,11 +84,6 @@ namespace Popcorn.ViewModels.Windows
         private bool _isShowFlyoutOpen;
 
         /// <summary>
-        /// If an update is available
-        /// </summary>
-        private bool _updateAvailable;
-
-        /// <summary>
         /// Toggle fullscreen mode
         /// </summary>
         private bool _toggleFullscreen;
@@ -114,7 +109,7 @@ namespace Popcorn.ViewModels.Windows
         private MediaPlayerViewModel _mediaPlayer;
 
         /// <summary>
-        /// Ignore taskbar on maximize 
+        /// Ignore taskbar on maximize
         /// </summary>
         private bool _ignoreTaskbarOnMaximize;
 
@@ -171,7 +166,7 @@ namespace Popcorn.ViewModels.Windows
         }
 
         /// <summary>
-        /// Ignore taskbar on maximize 
+        /// Ignore taskbar on maximize
         /// </summary>
         public bool IgnoreTaskbarOnMaximize
         {
@@ -204,15 +199,6 @@ namespace Popcorn.ViewModels.Windows
         {
             get => _isShowFlyoutOpen;
             set { Set(() => IsShowFlyoutOpen, ref _isShowFlyoutOpen, value); }
-        }
-
-        /// <summary>
-        /// If an update is available
-        /// </summary>
-        public bool UpdateAvailable
-        {
-            get => _updateAvailable;
-            set { Set(() => UpdateAvailable, ref _updateAvailable, value); }
         }
 
         /// <summary>
@@ -283,7 +269,11 @@ namespace Popcorn.ViewModels.Windows
                 IsMovieFlyoutOpen = true;
             });
 
-            Messenger.Default.Register<LoadShowMessage>(this, e => IsShowFlyoutOpen = true);
+            Messenger.Default.Register<LoadShowMessage>(this, e =>
+            {
+                IsCastFlyoutOpen = false;
+                IsShowFlyoutOpen = true;
+            });
 
             Messenger.Default.Register<PlayShowEpisodeMessage>(this, message =>
             {
@@ -342,6 +332,7 @@ namespace Popcorn.ViewModels.Windows
                     ApplicationService.IsMediaPlaying = true;
                     IsShowFlyoutOpen = false;
                     IsMovieFlyoutOpen = false;
+                    IsCastFlyoutOpen = false;
                     if (NavigationService.CurrentSource.OriginalString == "Popcorn;component/Pages/PlayerPage.xaml")
                     {
                         NavigationService.Refresh();
@@ -377,6 +368,8 @@ namespace Popcorn.ViewModels.Windows
                 {
                     ApplicationService.IsMediaPlaying = true;
                     IsMovieFlyoutOpen = false;
+                    IsShowFlyoutOpen = false;
+                    IsCastFlyoutOpen = false;
                     if (NavigationService.CurrentSource.OriginalString == "Popcorn;component/Pages/PlayerPage.xaml")
                     {
                         NavigationService.Refresh();
@@ -403,6 +396,7 @@ namespace Popcorn.ViewModels.Windows
                     ApplicationService.IsMediaPlaying = true;
                     IsMovieFlyoutOpen = false;
                     IsShowFlyoutOpen = false;
+                    IsCastFlyoutOpen = false;
                     if (NavigationService.CurrentSource.OriginalString == "Popcorn;component/Pages/PlayerPage.xaml")
                     {
                         NavigationService.Refresh();
@@ -470,6 +464,7 @@ namespace Popcorn.ViewModels.Windows
 
                 ApplicationService.IsMediaPlaying = false;
                 IsMovieFlyoutOpen = false;
+                IsCastFlyoutOpen = false;
                 IsShowFlyoutOpen = false;
 
                 if (NavigationService.CurrentSource.OriginalString != "Pages/HomePage.xaml" &&
@@ -517,8 +512,6 @@ namespace Popcorn.ViewModels.Windows
 
             Messenger.Default.Register<UnhandledExceptionMessage>(this,
                 async message => await ManageException(message.Exception));
-
-            Messenger.Default.Register<UpdateAvailableMessage>(this, message => { UpdateAvailable = true; });
 
             Messenger.Default.Register<SearchCastMessage>(this, message => { IsCastFlyoutOpen = true; });
 

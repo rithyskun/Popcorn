@@ -958,17 +958,9 @@ namespace Popcorn.Services.Movies.Movie
         /// <returns><see cref="Person"/></returns>
         public async Task<Person> GetCast(string imdbCode)
         {
-            try
-            {
-                var search = await (await _tmdbService.GetClient).FindAsync(FindExternalSource.Imdb, $"nm{imdbCode}");
-                return await (await _tmdbService.GetClient).GetPersonAsync(search.PersonResults.First().Id,
-                    PersonMethods.Images | PersonMethods.TaggedImages);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex);
-                return null;
-            }
+            var search = await (await _tmdbService.GetClient).FindAsync(FindExternalSource.Imdb, $"nm{imdbCode}");
+            return await (await _tmdbService.GetClient).GetPersonAsync(search.PersonResults.First().Id,
+                PersonMethods.Images | PersonMethods.TaggedImages);
         }
 
         /// <summary>

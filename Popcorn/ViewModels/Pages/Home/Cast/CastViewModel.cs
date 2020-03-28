@@ -10,6 +10,8 @@ using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.CommandWpf;
 using GalaSoft.MvvmLight.Messaging;
 using NLog;
+using Popcorn.Exceptions;
+using Popcorn.Helpers;
 using Popcorn.Messaging;
 using Popcorn.Models.Movie;
 using Popcorn.Services.Movies.Movie;
@@ -115,6 +117,8 @@ namespace Popcorn.ViewModels.Pages.Home.Cast
                 catch (Exception ex)
                 {
                     Logger.Error(ex);
+                    Messenger.Default.Send(new NavigateToHomePageMessage());
+                    Messenger.Default.Send(new ManageExceptionMessage(new PopcornException($"{LocalizationProviderHelper.GetLocalizedValue<string>("FailedLoadingLabel")} {message.Cast.Name}")));
                 }
                 finally
                 {
