@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace Popcorn.Models.Image
 {
+    [DataContract]
     public class ImageShowJson
     {
         [DataMember(Name = "poster")]

@@ -1,10 +1,9 @@
-﻿using System.Collections.Generic;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 using GalaSoft.MvvmLight;
-using RestSharp.Deserializers;
 
 namespace Popcorn.Models.Movie
 {
+    [DataContract]
     public class MovieLightJson : ObservableObject, IMovie
     {
         private string _posterImage;
@@ -15,7 +14,7 @@ namespace Popcorn.Models.Movie
         private double _rating;
         private string _title;
         private int _year;
-        
+
         [DataMember(Name = "imdbCode")]
         public string ImdbId
         {

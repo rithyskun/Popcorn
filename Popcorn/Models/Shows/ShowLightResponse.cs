@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 using System.Runtime.Serialization;
-using System.Text;
-using System.Threading.Tasks;
-using RestSharp.Deserializers;
 
 namespace Popcorn.Models.Shows
 {
+    [DataContract]
     public class ShowLightResponse
     {
         [DataMember(Name = "totalShows")]

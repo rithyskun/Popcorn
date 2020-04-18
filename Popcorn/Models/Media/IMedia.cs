@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using OSDB.Models;
 using Popcorn.Enums;
 using Popcorn.Models.Torrent;
-using Popcorn.Utils;
 
 namespace Popcorn.Models.Media
 {

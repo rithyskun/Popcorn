@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Configuration;
-using System.Data;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,19 +9,14 @@ using Popcorn.Models.Shows;
 using Popcorn.Models.User;
 using System.Linq;
 using GalaSoft.MvvmLight.Ioc;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using Polly;
 using Polly.Timeout;
-using Popcorn.Database;
 using Popcorn.Services.Tmdb;
 using Popcorn.Exceptions;
 using Popcorn.Helpers;
-using Popcorn.Models.Episode;
-using Popcorn.Models.Image;
-using Popcorn.Models.Rating;
-using Popcorn.Models.Torrent.Show;
 using Popcorn.ViewModels.Pages.Home.Settings.ApplicationSettings;
+using RestSharp;
 using VideoLibrary;
 
 namespace Popcorn.Services.Shows.Show
@@ -36,6 +28,9 @@ namespace Popcorn.Services.Shows.Show
         /// </summary>
         private static Logger Logger { get; } = LogManager.GetCurrentClassLogger();
 
+        /// <summary>
+        /// <see cref="ITmdbService"/>
+        /// </summary>
         private readonly ITmdbService _tmdbService;
 
         /// <summary>
@@ -48,11 +43,20 @@ namespace Popcorn.Services.Shows.Show
         }
 
         /// <summary>
+        /// <see cref="RestClient"/>
+        /// </summary>
+        private readonly RestClient _restClient;
+
+        /// <summary>
         /// Constructor
         /// </summary>
         public ShowService(ITmdbService tmdbService)
         {
             _tmdbService = tmdbService;
+            _restClient = new RestClient(Constants.PopcornApi)
+            {
+                RemoteCertificateValidationCallback = (sender, certificate, chain, errors) => true
+            };
         }
 
         /// <summary>
@@ -69,41 +73,19 @@ namespace Popcorn.Services.Shows.Show
             {
                 return await timeoutPolicy.ExecuteAsync(async cancellation =>
                 {
-                    var optionsBuilder = new DbContextOptionsBuilder<PopcornContext>();
-                    optionsBuilder.UseSqlServer(
-                        (ConfigurationManager.GetSection("settings") as NameValueCollection)["SQLConnectionString"],
-                        builder =>
-                        {
-                            builder.CommandTimeout(Convert.ToInt32(TimeSpan.FromSeconds(60).TotalSeconds));
-                            builder.EnableRetryOnFailure();
-                        });
-                    await using var context = new PopcornContext(optionsBuilder.Options);
-
                     var watch = Stopwatch.StartNew();
-                    var showJson = new ShowJson();
+                    var request = new RestRequest("/{segment}/{show}", Method.GET);
+                    request.AddUrlSegment("segment", "shows");
+                    request.AddUrlSegment("show", imdbId);
+                    var show = new ShowJson();
                     try
                     {
-                        var show = await context.ShowSet.Include(a => a.Rating)
-                            .Include(a => a.Episodes)
-                            .ThenInclude(episode => episode.Torrents)
-                            .ThenInclude(torrent => torrent.Torrent0)
-                            .Include(a => a.Episodes)
-                            .ThenInclude(episode => episode.Torrents)
-                            .ThenInclude(torrent => torrent.Torrent1080p)
-                            .Include(a => a.Episodes)
-                            .ThenInclude(episode => episode.Torrents)
-                            .ThenInclude(torrent => torrent.Torrent480p)
-                            .Include(a => a.Episodes)
-                            .Include(a => a.Episodes)
-                            .ThenInclude(episode => episode.Torrents)
-                            .ThenInclude(torrent => torrent.Torrent720p)
-                            .Include(a => a.Genres)
-                            .Include(a => a.Images)
-                            .Include(a => a.Similars).AsQueryable()
-                            .FirstOrDefaultAsync(a => a.ImdbId == imdbId, cancellation);
-                        showJson = ConvertShowToJson(show);
-                        var shows = await (await _tmdbService.GetClient).SearchTvShowAsync(show.Title,
-                            cancellationToken: cancellation);
+                        var response = await _restClient.ExecuteTaskAsync(request, cancellation);
+                        if (response.ErrorException != null)
+                            throw response.ErrorException;
+
+                        show = JsonConvert.DeserializeObject<ShowJson>(response.Content);
+                        var shows = await (await _tmdbService.GetClient).SearchTvShowAsync(show.Title, cancellationToken: cancellation);
                         if (shows.Results.Any())
                         {
                             foreach (var tvShow in shows.Results)
@@ -111,11 +93,10 @@ namespace Popcorn.Services.Shows.Show
                                 try
                                 {
                                     var result =
-                                        await (await _tmdbService.GetClient).GetTvShowExternalIdsAsync(tvShow.Id,
-                                            cancellation);
+                                        await (await _tmdbService.GetClient).GetTvShowExternalIdsAsync(tvShow.Id, cancellationToken: cancellation);
                                     if (result.ImdbId == show.ImdbId)
                                     {
-                                        showJson.TmdbId = result.Id;
+                                        show.TmdbId = result.Id;
                                     }
                                 }
                                 catch (Exception ex)
@@ -144,7 +125,7 @@ namespace Popcorn.Services.Shows.Show
                             $"GetShowAsync ({imdbId}) in {elapsedMs} milliseconds.");
                     }
 
-                    return showJson;
+                    return show;
                 }, ct);
             }
             catch (Exception ex)
@@ -168,77 +149,18 @@ namespace Popcorn.Services.Shows.Show
             {
                 return await timeoutPolicy.ExecuteAsync(async cancellation =>
                 {
-                    var optionsBuilder = new DbContextOptionsBuilder<PopcornContext>();
-                    optionsBuilder.UseSqlServer(
-                        (ConfigurationManager.GetSection("settings") as NameValueCollection)["SQLConnectionString"],
-                        builder =>
-                        {
-                            builder.CommandTimeout(Convert.ToInt32(TimeSpan.FromSeconds(60).TotalSeconds));
-                            builder.EnableRetryOnFailure();
-                        });
-                    await using var context = new PopcornContext(optionsBuilder.Options);
-
                     var watch = Stopwatch.StartNew();
-                    var imdbParameter = new SqlParameter("@imdbId", imdbId);
-                    var query = @"
-                    SELECT 
-                        Show.Title, Show.Year, Rating.Percentage, Rating.Loved, Rating.Votes, Rating.Hated, Rating.Watching, Show.LastUpdated, Image.Banner, Image.Poster, Show.ImdbId, Show.TvdbId, Show.GenreNames
-                    FROM 
-                        ShowSet AS Show
-                    INNER JOIN 
-                        ImageShowSet AS Image
-                    ON 
-                        Image.Id = Show.ImagesId
-                    INNER JOIN 
-                        RatingSet AS Rating
-                    ON 
-                        Rating.Id = Show.RatingId
-                    WHERE
-                        Show.ImdbId = @imdbId";
-
+                    var request = new RestRequest("/{segment}/light/{show}", Method.GET);
+                    request.AddUrlSegment("segment", "shows");
+                    request.AddUrlSegment("show", imdbId);
                     var show = new ShowLightJson();
-
                     try
                     {
-                        await using var command = context.Database.GetDbConnection().CreateCommand();
-                        command.CommandText = query;
-                        command.CommandType = CommandType.Text;
-                        command.Parameters.Add(imdbParameter);
-                        await context.Database.OpenConnectionAsync(cancellation);
-                        await using var reader = await command.ExecuteReaderAsync(cancellation);
-                        while (await reader.ReadAsync(cancellation))
-                        {
-                            show.Title = !await reader.IsDBNullAsync(0, cancellation)
-                                ? reader.GetString(0)
-                                : string.Empty;
-                            show.Year = !await reader.IsDBNullAsync(1, cancellation) ? reader.GetInt32(1) : 0;
-                            show.Rating = new RatingJson
-                            {
-                                Percentage = !await reader.IsDBNullAsync(2, cancellation) ? reader.GetInt32(2) : 0,
-                                Loved = !await reader.IsDBNullAsync(3, cancellation) ? reader.GetInt32(3) : 0,
-                                Votes = !await reader.IsDBNullAsync(4, cancellation) ? reader.GetInt32(4) : 0,
-                                Hated = !await reader.IsDBNullAsync(5, cancellation) ? reader.GetInt32(5) : 0,
-                                Watching = !await reader.IsDBNullAsync(6, cancellation) ? reader.GetInt32(6) : 0
-                            };
-                            show.Images = new ImageShowJson
-                            {
-                                Banner = !await reader.IsDBNullAsync(8, cancellation)
-                                    ? reader.GetString(8)
-                                    : string.Empty,
-                                Poster = !await reader.IsDBNullAsync(9, cancellation)
-                                    ? reader.GetString(9)
-                                    : string.Empty,
-                            };
-                            show.ImdbId = !await reader.IsDBNullAsync(10, cancellation)
-                                ? reader.GetString(10)
-                                : string.Empty;
-                            show.TvdbId = !await reader.IsDBNullAsync(11, cancellation)
-                                ? reader.GetString(11)
-                                : string.Empty;
-                            show.Genres = !await reader.IsDBNullAsync(12, cancellation)
-                                ? reader.GetString(12)
-                                : string.Empty;
-                        }
+                        var response = await _restClient.ExecuteTaskAsync(request, cancellation);
+                        if (response.ErrorException != null)
+                            throw response.ErrorException;
+
+                        show = JsonConvert.DeserializeObject<ShowLightJson>(response.Content);
                     }
                     catch (Exception exception) when (exception is TaskCanceledException)
                     {
@@ -284,93 +206,20 @@ namespace Popcorn.Services.Shows.Show
             {
                 return await timeoutPolicy.ExecuteAsync(async cancellation =>
                 {
-                    var optionsBuilder = new DbContextOptionsBuilder<PopcornContext>();
-                    optionsBuilder.UseSqlServer(
-                        (ConfigurationManager.GetSection("settings") as NameValueCollection)["SQLConnectionString"],
-                        builder =>
-                        {
-                            builder.CommandTimeout(Convert.ToInt32(TimeSpan.FromSeconds(60).TotalSeconds));
-                            builder.EnableRetryOnFailure();
-                        });
-                    await using var context = new PopcornContext(optionsBuilder.Options);
-
                     var watch = Stopwatch.StartNew();
-                    var query = @"
-                    SELECT DISTINCT
-                        Show.Title, Show.Year, Rating.Percentage, Rating.Loved, Rating.Votes, Rating.Hated, Rating.Watching, Show.LastUpdated, Image.Banner, Image.Poster, Show.ImdbId, Show.TvdbId, Show.GenreNames, COUNT(*) OVER () as TotalCount
-                    FROM 
-                        ShowSet AS Show
-                    INNER JOIN 
-                        ImageShowSet AS Image
-                    ON 
-                        Image.Id = Show.ImagesId
-                    INNER JOIN 
-                        RatingSet AS Rating
-                    ON 
-                        Rating.Id = Show.RatingId
-                    WHERE
-                        Show.ImdbId IN ({0})";
+                    var wrapper = new ShowLightResponse();
+                    var request = new RestRequest("/{segment}/{subsegment}", Method.POST);
+                    request.AddUrlSegment("segment", "shows");
+                    request.AddUrlSegment("subsegment", "ids");
+                    request.AddJsonBody(imdbIds);
 
-                    await using var command = context.Database.GetDbConnection().CreateCommand();
-                    command.CommandType = CommandType.Text;
-                    var imdbParameters = new List<string>();
-                    var index = 0;
-                    foreach (var imdb in imdbIds)
-                    {
-                        var paramName = "@imdb" + index;
-                        command.Parameters.Add(new SqlParameter(paramName, imdb));
-                        imdbParameters.Add(paramName);
-                        index++;
-                    }
-
-                    command.CommandText = string.Format(query, string.Join(",", imdbParameters));
-                    var count = 0;
-                    var shows = new List<ShowLightJson>();
                     try
                     {
-                        await context.Database.OpenConnectionAsync(cancellation);
-                        await using var reader = await command.ExecuteReaderAsync(cancellation);
-                        while (await reader.ReadAsync(cancellation))
-                        {
-                            var show = new ShowLightJson
-                            {
-                                Title = !await reader.IsDBNullAsync(0, cancellation)
-                                    ? reader.GetString(0)
-                                    : string.Empty,
-                                Year = !await reader.IsDBNullAsync(1, cancellation) ? reader.GetInt32(1) : 0,
-                                Rating = new RatingJson
-                                {
-                                    Percentage = !await reader.IsDBNullAsync(2, cancellation) ? reader.GetInt32(2) : 0,
-                                    Loved = !await reader.IsDBNullAsync(3, cancellation) ? reader.GetInt32(3) : 0,
-                                    Votes = !await reader.IsDBNullAsync(4, cancellation) ? reader.GetInt32(4) : 0,
-                                    Hated = !await reader.IsDBNullAsync(5, cancellation) ? reader.GetInt32(5) : 0,
-                                    Watching = !await reader.IsDBNullAsync(6, cancellation) ? reader.GetInt32(6) : 0
-                                },
-                                Images = new ImageShowJson
-                                {
-                                    Banner =
-                                        !await reader.IsDBNullAsync(8, cancellation)
-                                            ? reader.GetString(8)
-                                            : string.Empty,
-                                    Poster =
-                                        !await reader.IsDBNullAsync(9, cancellation)
-                                            ? reader.GetString(9)
-                                            : string.Empty,
-                                },
-                                ImdbId = !await reader.IsDBNullAsync(10, cancellation)
-                                    ? reader.GetString(10)
-                                    : string.Empty,
-                                TvdbId = !await reader.IsDBNullAsync(11, cancellation)
-                                    ? reader.GetString(11)
-                                    : string.Empty,
-                                Genres = !await reader.IsDBNullAsync(12, cancellation)
-                                    ? reader.GetString(12)
-                                    : string.Empty
-                            };
+                        var response = await _restClient.ExecuteTaskAsync(request, cancellation);
+                        if (response.ErrorException != null)
+                            throw response.ErrorException;
 
-                            shows.Add(show);
-                            count = !await reader.IsDBNullAsync(13, cancellation) ? reader.GetInt32(13) : 0;
-                        }
+                        wrapper = JsonConvert.DeserializeObject<ShowLightResponse>(response.Content);
                     }
                     catch (Exception exception) when (exception is TaskCanceledException)
                     {
@@ -391,7 +240,9 @@ namespace Popcorn.Services.Shows.Show
                             $"GetShowsByIds ({string.Join(",", imdbIds)}) in {elapsedMs} milliseconds.");
                     }
 
-                    return (shows, count);
+                    var result = wrapper?.Shows ?? new List<ShowLightJson>();
+                    var nbResult = wrapper?.TotalShows ?? 0;
+                    return (result, nbResult);
                 }, ct);
             }
             catch (Exception ex)
@@ -452,155 +303,29 @@ namespace Popcorn.Services.Shows.Show
             {
                 return await timeoutPolicy.ExecuteAsync(async cancellation =>
                 {
-                    var optionsBuilder = new DbContextOptionsBuilder<PopcornContext>();
-                    optionsBuilder.UseSqlServer(
-                        (ConfigurationManager.GetSection("settings") as NameValueCollection)["SQLConnectionString"],
-                        builder =>
-                        {
-                            builder.CommandTimeout(Convert.ToInt32(TimeSpan.FromSeconds(60).TotalSeconds));
-                            builder.EnableRetryOnFailure();
-                        });
-                    await using var context = new PopcornContext(optionsBuilder.Options);
-
                     var watch = Stopwatch.StartNew();
+                    var wrapper = new ShowLightResponse();
                     if (limit < 1 || limit > 50)
                         limit = Constants.MaxShowsPerPage;
 
                     if (page < 1)
                         page = 1;
 
-                    var count = 0;
-                    var shows = new List<ShowLightJson>();
-
-                    var skipParameter = new SqlParameter("@skip", (page - 1) * limit);
-                    var takeParameter = new SqlParameter("@take", limit);
-                    var ratingParameter = new SqlParameter("@rating", Convert.ToInt32(ratingFilter).ToString());
-                    var queryParameter = new SqlParameter("@Keywords", string.Format(@"""{0}""", criteria));
-                    var genreParameter = new SqlParameter("@genre", genre != null ? genre.EnglishName : string.Empty);
-                    var query = @"
-                    SELECT 
-                        Show.Title, Show.Year, Rating.Percentage, Rating.Loved, Rating.Votes, Rating.Hated, Rating.Watching, Show.LastUpdated, Image.Banner, Image.Poster, Show.ImdbId, Show.TvdbId, Show.GenreNames, COUNT(*) OVER () as TotalCount
-                    FROM 
-                        ShowSet AS Show
-                    INNER JOIN 
-                        ImageShowSet AS Image
-                    ON 
-                        Image.Id = Show.ImagesId
-                    INNER JOIN 
-                        RatingSet AS Rating
-                    ON 
-                        Rating.Id = Show.RatingId
-                    WHERE
-                        Show.NumSeasons <> 0";
-
-                    if (ratingFilter >= 0 && ratingFilter <= 100)
-                    {
-                        query += @" AND
-                        Rating.Percentage >= @rating";
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(criteria))
-                    {
-                        query += @" AND
-                        (CONTAINS(Title, @Keywords) OR CONTAINS(ImdbId, @Keywords) OR CONTAINS(TvdbId, @Keywords))";
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(genre != null ? genre.EnglishName : string.Empty))
-                    {
-                        query += @" AND
-                        CONTAINS(GenreNames, @genre)";
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(sortBy))
-                    {
-                        switch (sortBy)
-                        {
-                            case "title":
-                                query += " ORDER BY Show.Title ASC";
-                                break;
-                            case "year":
-                                query += " ORDER BY Show.Year DESC";
-                                break;
-                            case "rating":
-                                query += " ORDER BY Rating.Percentage DESC";
-                                break;
-                            case "loved":
-                                query += " ORDER BY Rating.Loved DESC";
-                                break;
-                            case "votes":
-                                query += " ORDER BY Rating.Votes DESC";
-                                break;
-                            case "watching":
-                                query += " ORDER BY Rating.Watching DESC";
-                                break;
-                            case "date_added":
-                                query += " ORDER BY Show.LastUpdated DESC";
-                                break;
-                            default:
-                                query += " ORDER BY Show.LastUpdated DESC";
-                                break;
-                        }
-                    }
-                    else
-                    {
-                        query += " ORDER BY Show.LastUpdated DESC";
-                    }
-
-                    query += @" OFFSET @skip ROWS 
-                    FETCH NEXT @take ROWS ONLY";
+                    var request = new RestRequest("/{segment}", Method.GET);
+                    request.AddUrlSegment("segment", "shows");
+                    request.AddParameter("limit", limit);
+                    request.AddParameter("page", page);
+                    request.AddParameter("genre", genre != null ? genre.EnglishName : string.Empty);
+                    request.AddParameter("minimum_rating", Convert.ToInt32(ratingFilter));
+                    request.AddParameter("query_term", criteria);
+                    request.AddParameter("sort_by", "year");
                     try
                     {
-                        await using var command = context.Database.GetDbConnection().CreateCommand();
-                        command.CommandText = query;
-                        command.CommandType = CommandType.Text;
-                        command.Parameters.Add(skipParameter);
-                        command.Parameters.Add(takeParameter);
-                        command.Parameters.Add(ratingParameter);
-                        command.Parameters.Add(queryParameter);
-                        command.Parameters.Add(genreParameter);
-                        await context.Database.OpenConnectionAsync(cancellation);
-                        await using var reader = await command.ExecuteReaderAsync(cancellation);
+                        var response = await _restClient.ExecuteTaskAsync(request, cancellation);
+                        if (response.ErrorException != null)
+                            throw response.ErrorException;
 
-                        while (await reader.ReadAsync(cancellation))
-                        {
-                            var show = new ShowLightJson
-                            {
-                                Title = !await reader.IsDBNullAsync(0, cancellation)
-                                    ? reader.GetString(0)
-                                    : string.Empty,
-                                Year = !await reader.IsDBNullAsync(1, cancellation) ? reader.GetInt32(1) : 0,
-                                Rating = new RatingJson
-                                {
-                                    Percentage = !await reader.IsDBNullAsync(2, cancellation) ? reader.GetInt32(2) : 0,
-                                    Loved = !await reader.IsDBNullAsync(3, cancellation) ? reader.GetInt32(3) : 0,
-                                    Votes = !await reader.IsDBNullAsync(4, cancellation) ? reader.GetInt32(4) : 0,
-                                    Hated = !await reader.IsDBNullAsync(5, cancellation) ? reader.GetInt32(5) : 0,
-                                    Watching = !await reader.IsDBNullAsync(6, cancellation) ? reader.GetInt32(6) : 0
-                                },
-                                Images = new ImageShowJson
-                                {
-                                    Banner =
-                                        !await reader.IsDBNullAsync(8, cancellation)
-                                            ? reader.GetString(8)
-                                            : string.Empty,
-                                    Poster =
-                                        !await reader.IsDBNullAsync(9, cancellation)
-                                            ? reader.GetString(9)
-                                            : string.Empty,
-                                },
-                                ImdbId = !await reader.IsDBNullAsync(10, cancellation)
-                                    ? reader.GetString(10)
-                                    : string.Empty,
-                                TvdbId = !await reader.IsDBNullAsync(11, cancellation)
-                                    ? reader.GetString(11)
-                                    : string.Empty,
-                                Genres = !await reader.IsDBNullAsync(12, cancellation)
-                                    ? reader.GetString(12)
-                                    : string.Empty
-                            };
-                            shows.Add(show);
-                            count = !await reader.IsDBNullAsync(13, cancellation) ? reader.GetInt32(13) : 0;
-                        }
+                        wrapper = JsonConvert.DeserializeObject<ShowLightResponse>(response.Content);
                     }
                     catch (Exception exception) when (exception is TaskCanceledException)
                     {
@@ -621,7 +346,9 @@ namespace Popcorn.Services.Shows.Show
                             $"SearchShowsAsync ({criteria}, {page}, {limit}) in {elapsedMs} milliseconds.");
                     }
 
-                    return (shows, count);
+                    var result = wrapper?.Shows ?? new List<ShowLightJson>();
+                    var nbResult = wrapper?.TotalShows ?? 0;
+                    return (result, nbResult);
                 }, ct);
             }
             catch (Exception ex)
@@ -703,83 +430,6 @@ namespace Popcorn.Services.Shows.Show
                 Logger.Error(ex);
                 throw;
             }
-        }
-
-        private ShowJson ConvertShowToJson(Database.Show show)
-        {
-            return new ShowJson
-            {
-                AirDay = show.AirDay,
-                Rating = new RatingJson
-                {
-                    Hated = show.Rating?.Hated,
-                    Loved = show.Rating?.Loved,
-                    Percentage = show.Rating?.Percentage,
-                    Votes = show.Rating?.Votes,
-                    Watching = show.Rating?.Watching
-                },
-                Title = show.Title,
-                Genres = show.Genres.Select(genre => genre.Name).ToList(),
-                Year = show.Year,
-                ImdbId = show.ImdbId,
-                Episodes = show.Episodes.Select(episode => new EpisodeShowJson
-                {
-                    DateBased = episode.DateBased,
-                    EpisodeNumber = episode.EpisodeNumber,
-                    Torrents = new TorrentShowNodeJson
-                    {
-                        Torrent_0 = new TorrentShowJson
-                        {
-                            Peers = episode.Torrents?.Torrent0?.Peers,
-                            Seeds = episode.Torrents?.Torrent0?.Seeds,
-                            Provider = episode.Torrents?.Torrent0?.Provider,
-                            Url = episode.Torrents?.Torrent0?.Url
-                        },
-                        Torrent_1080p = new TorrentShowJson
-                        {
-                            Peers = episode.Torrents?.Torrent1080p?.Peers,
-                            Seeds = episode.Torrents?.Torrent1080p?.Seeds,
-                            Provider = episode.Torrents?.Torrent1080p?.Provider,
-                            Url = episode.Torrents?.Torrent1080p?.Url
-                        },
-                        Torrent_720p = new TorrentShowJson
-                        {
-                            Peers = episode.Torrents?.Torrent720p?.Peers,
-                            Seeds = episode.Torrents?.Torrent720p?.Seeds,
-                            Provider = episode.Torrents?.Torrent720p?.Provider,
-                            Url = episode.Torrents?.Torrent720p?.Url
-                        },
-                        Torrent_480p = new TorrentShowJson
-                        {
-                            Peers = episode.Torrents?.Torrent480p?.Peers,
-                            Seeds = episode.Torrents?.Torrent480p?.Seeds,
-                            Provider = episode.Torrents?.Torrent480p?.Provider,
-                            Url = episode.Torrents?.Torrent480p?.Url
-                        }
-                    },
-                    FirstAired = episode.FirstAired,
-                    Title = episode.Title,
-                    Overview = episode.Overview,
-                    Season = episode.Season,
-                    TvdbId = episode.TvdbId
-                }).ToList(),
-                TvdbId = show.TvdbId,
-                AirTime = show.AirTime,
-                Country = show.Country,
-                Images = new ImageShowJson
-                {
-                    Banner = show.Images?.Banner,
-                    Poster = show.Images?.Poster
-                },
-                LastUpdated = show.LastUpdated,
-                Network = show.Network,
-                NumSeasons = show.NumSeasons,
-                Runtime = show.Runtime,
-                Slug = show.Slug,
-                Status = show.Status,
-                Synopsis = show.Synopsis,
-                Similars = show.Similars.Select(a => a.TmdbId).ToList()
-            };
         }
     }
 }

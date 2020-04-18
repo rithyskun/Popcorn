@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 using System.Runtime.Serialization;
-using System.Text;
-using System.Threading.Tasks;
 using GalaSoft.MvvmLight;
 using Popcorn.Models.Episode;
 using Popcorn.Models.Image;
@@ -11,6 +7,7 @@ using Popcorn.Models.Rating;
 
 namespace Popcorn.Models.Shows
 {
+    [DataContract]
     public class ShowJson : ObservableObject, IShow
     {
         private bool _isFavorite;

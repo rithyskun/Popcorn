@@ -1,9 +1,9 @@
 ﻿using System.Runtime.Serialization;
 using GalaSoft.MvvmLight;
-using RestSharp.Deserializers;
 
 namespace Popcorn.Models.Torrent.Movie
 {
+    [DataContract]
     public class TorrentJson : ObservableObject, ITorrent
     {
         private string _dateUploaded;

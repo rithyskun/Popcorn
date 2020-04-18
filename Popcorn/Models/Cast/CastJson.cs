@@ -1,9 +1,9 @@
 ﻿using System.Runtime.Serialization;
 using GalaSoft.MvvmLight;
-using RestSharp.Deserializers;
 
 namespace Popcorn.Models.Cast
 {
+    [DataContract]
     public class CastJson : ObservableObject
     {
         private string _characterName;
@@ -31,7 +31,7 @@ namespace Popcorn.Models.Cast
             get => _smallImage;
             set { Set(() => SmallImage, ref _smallImage, value); }
         }
-        
+
         [DataMember(Name = "imdbCode")]
         public string ImdbCode
         {

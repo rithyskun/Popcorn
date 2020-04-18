@@ -14,12 +14,17 @@ namespace Popcorn.Helpers
         /// <summary>
         /// App version
         /// </summary>
-        public const string AppVersion = "1.0.3";
+        public const string AppVersion = "1.0.4";
 
         /// <summary>
         /// Copyright
         /// </summary>
         public static readonly string Copyright = "Copyright Popcorn © 2019-" + DateTime.Now.Year;
+
+        /// <summary>
+        /// Popcorn Api
+        /// </summary>
+        public const string PopcornApi = "https://workstation.ns1.name/api";
 
         /// <summary>
         /// Client ID for TMDb

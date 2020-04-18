@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.Serialization;
-using System.Text;
-using System.Threading.Tasks;
-using RestSharp.Deserializers;
+﻿using System.Runtime.Serialization;
 
 namespace Popcorn.Models.Trailer
 {
+    [DataContract]
     public class TrailerResponse
     {
         [DataMember(Name = "trailer_url")]

@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,6 +28,8 @@ namespace Popcorn.AttachedProperties
     /// </summary>
     public class ImageAsyncHelper : DependencyObject
     {
+        private static readonly Lazy<HttpClient> HttpClient = new Lazy<HttpClient>(() => new HttpClient(), LazyThreadSafetyMode.ExecutionAndPublication);
+
         /// <summary>
         /// Get ImageType
         /// </summary>
@@ -169,29 +172,20 @@ namespace Popcorn.AttachedProperties
                                 {
                                     if (mustDownload)
                                     {
-                                        using (var client = new HttpClient())
+                                        await using var ms = await HttpClient.Value.GetStreamAsync(path);
+                                        await using var stream = new MemoryStream();
+                                        await ms.CopyToAsync(stream);
+                                        if (!File.Exists(cacheService.Assets + hash))
                                         {
-                                            using (var ms = await client.GetStreamAsync(path))
-                                            {
-                                                using (var stream = new MemoryStream())
-                                                {
-                                                    await ms.CopyToAsync(stream);
-                                                    if (!File.Exists(cacheService.Assets + hash))
-                                                    {
-                                                        using (var fs =
-                                                            new FileStream(localFile, FileMode.Create,
-                                                                FileAccess.ReadWrite, FileShare.ReadWrite, 4096, true))
-                                                        {
-                                                            var writeAsync = stream.ToArray();
-                                                            await fs.WriteAsync(writeAsync, 0, writeAsync.Length);
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                            await using var fs =
+                                                new FileStream(localFile, FileMode.Create,
+                                                    FileAccess.ReadWrite, FileShare.ReadWrite, 4096, true);
+                                            var writeAsync = stream.ToArray();
+                                            await fs.WriteAsync(writeAsync, 0, writeAsync.Length);
                                         }
                                     }
 
-                                    using (var fs = new FileStream(localFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+                                    await using (var fs = new FileStream(localFile, FileMode.Open, FileAccess.Read, FileShare.Read))
                                     {
                                         var bitmapImage = new BitmapImage();
                                         bitmapImage.BeginInit();

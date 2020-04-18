@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Runtime.Serialization;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Messaging;
@@ -12,20 +11,19 @@ using Popcorn.Helpers;
 using Popcorn.Messaging;
 using Popcorn.Models.Cast;
 using Popcorn.Models.Torrent.Movie;
-using RestSharp.Deserializers;
 using Popcorn.Models.Media;
 using Popcorn.Models.Torrent;
-using Popcorn.Utils;
 
 namespace Popcorn.Models.Movie
 {
+    [DataContract]
     public class MovieJson : ObservableObject, IMediaFile, IMovie, IMedia
     {
         private List<CastJson> _cast;
 
         private ObservableCollection<Subtitle> _availableSubtitles =
             new ObservableCollection<Subtitle>();
-        
+
         private string _dateUploaded;
         private string _posterImage;
         private int _dateUploadedUnix;

@@ -3,6 +3,7 @@ using System.Runtime.Serialization;
 
 namespace Popcorn.Models.Shows
 {
+    [DataContract]
     public class ShowResponse
     {
         [DataMember(Name = "totalShows")]

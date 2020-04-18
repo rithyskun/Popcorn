@@ -11,10 +11,10 @@ using Popcorn.Messaging;
 using Popcorn.Models.Torrent.Show;
 using Popcorn.Models.Media;
 using Popcorn.Models.Torrent;
-using Popcorn.Utils;
 
 namespace Popcorn.Models.Episode
 {
+    [DataContract]
     public class EpisodeShowJson : ObservableObject, IMediaFile, IMedia
     {
         private bool _watchInFullHdQuality;
@@ -90,7 +90,7 @@ namespace Popcorn.Models.Episode
             get => _filePath;
             set => Set(ref _filePath, value);
         }
-        
+
         public ITorrent SelectedTorrent
         {
             get => _selectedTorrent;

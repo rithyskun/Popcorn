@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 using System.Runtime.Serialization;
-using System.Text;
-using System.Threading.Tasks;
-using RestSharp.Deserializers;
 
 namespace Popcorn.Models.Genres
 {
+    [DataContract]
     public class GenreJson
     {
         [DataMember(Name = "EnglishName")]
@@ -17,6 +13,7 @@ namespace Popcorn.Models.Genres
         public string Name { get; set; }
     }
 
+    [DataContract]
     public class GenreResponse
     {
         [DataMember(Name = "genres")]

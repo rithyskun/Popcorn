@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace Popcorn.Models.Torrent.Show
 {
+    [DataContract]
     public class TorrentShowNodeJson
     {
         [DataMember(Name = "torrent_0")]

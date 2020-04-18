@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace Popcorn.Models.Rating
 {
+    [DataContract]
     public class RatingJson
     {
         [DataMember(Name = "percentage")]

@@ -2,10 +2,10 @@
 using GalaSoft.MvvmLight;
 using Popcorn.Models.Image;
 using Popcorn.Models.Rating;
-using RestSharp.Deserializers;
 
 namespace Popcorn.Models.Shows
 {
+    [DataContract]
     public class ShowLightJson : ObservableObject, IShow
     {
         private bool _isFavorite;
@@ -76,7 +76,7 @@ namespace Popcorn.Models.Shows
             get => _rating;
             set => Set(ref _rating, value);
         }
-    
+
         /// <summary>
         /// Indicate if movie is favorite
         /// </summary>
