@@ -538,7 +538,7 @@ namespace Popcorn.Services.Movies.Movie
                     request.AddParameter("genre", genre != null ? genre.EnglishName : string.Empty);
                     request.AddParameter("minimum_rating", Convert.ToInt32(ratingFilter));
                     request.AddParameter("query_term", criteria);
-                    request.AddParameter("sort_by", "year");
+                    request.AddParameter("sort_by", sortBy);
 
                     try
                     {

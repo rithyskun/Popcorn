@@ -42,6 +42,7 @@
     <PackageReference Include="Enterwell.Clients.Wpf.Notifications" Version="1.4.2" />
     <PackageReference Include="FFME.Windows" Version="4.2.330" />
     <PackageReference Include="Gu.Wpf.Adorners" Version="2.1.0" />
+    <PackageReference Include="libtorrent-net" Version="6.0.2" />
     <PackageReference Include="Humanizer" Version="2.7.9" />
     <PackageReference Include="Humanizer.Core" Version="2.7.9" />
     <PackageReference Include="Humanizer.Core.af" Version="2.7.9" />
@@ -86,7 +87,6 @@
     <PackageReference Include="Humanizer.Core.zh-CN" Version="2.7.9" />
     <PackageReference Include="Humanizer.Core.zh-Hans" Version="2.7.9" />
     <PackageReference Include="Humanizer.Core.zh-Hant" Version="2.7.9" />
-    <PackageReference Include="libtorrent-net" Version="6.0.0" />
     <PackageReference Include="LoadingIndicators.WPF.Core.Temporary" Version="1.0.1" />
     <PackageReference Include="MahApps.Metro" Version="2.0.0-alpha0748" />
     <PackageReference Include="MahApps.Metro.IconPacks" Version="3.7.0" />

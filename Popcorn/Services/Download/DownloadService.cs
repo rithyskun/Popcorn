@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using ltnet;
@@ -61,62 +62,54 @@ namespace Popcorn.Services.Download
             {
                 Logger.Info(
                     $"Start downloading : {torrentPath}");
-                using (var session = new Session())
+                using var session = new Session();
+                downloadProgress.Report(0d);
+                bandwidthRate.Report(new BandwidthRate
                 {
-                    downloadProgress.Report(0d);
-                    bandwidthRate.Report(new BandwidthRate
-                    {
-                        DownloadRate = 0d,
-                        UploadRate = 0d
-                    });
-                    nbSeeds.Report(0);
-                    nbPeers.Report(0);
-                    string savePath = string.Empty;
-                    switch (mediaType)
-                    {
-                        case MediaType.Movie:
-                            savePath = _cacheService.MovieDownloads;
-                            break;
-                        case MediaType.Show:
-                            savePath = _cacheService.ShowDownloads;
-                            break;
-                        case MediaType.Unkown:
-                            savePath = _cacheService.DropFilesDownloads;
-                            break;
-                    }
+                    DownloadRate = 0d,
+                    UploadRate = 0d
+                });
+                nbSeeds.Report(0);
+                nbPeers.Report(0);
+                string savePath = string.Empty;
+                switch (mediaType)
+                {
+                    case MediaType.Movie:
+                        savePath = _cacheService.MovieDownloads;
+                        break;
+                    case MediaType.Show:
+                        savePath = _cacheService.ShowDownloads;
+                        break;
+                    case MediaType.Unkown:
+                        savePath = _cacheService.DropFilesDownloads;
+                        break;
+                }
 
-                    if (torrentType == TorrentType.File)
+                if (torrentType == TorrentType.File)
+                {
+                    using var addParams = new AddTorrentParams
                     {
-                        using (var addParams = new AddTorrentParams()
-                        {
-                            save_path = savePath,
-                            ti = new TorrentInfo(torrentPath)
-                        })
-                        using (var handle = session.add_torrent(addParams))
-                        {
-                            await HandleDownload(media, savePath, mediaType, uploadLimit, downloadLimit,
-                                downloadProgress,
-                                bandwidthRate, nbSeeds, nbPeers, handle, session, buffered, cancelled, cts);
-                        }
-                    }
-                    else
+                        save_path = savePath,
+                        ti = new TorrentInfo(torrentPath)
+                    };
+                    using var handle = session.add_torrent(addParams);
+                    await HandleDownload(media, savePath, mediaType, uploadLimit, downloadLimit,
+                        downloadProgress,
+                        bandwidthRate, nbSeeds, nbPeers, handle, session, buffered, cancelled, cts);
+                }
+                else
+                {
+                    var magnet = new MagnetUri();
+                    using var error = new ErrorCode();
+                    var addParams = new AddTorrentParams
                     {
-                        var magnet = new MagnetUri();
-                        using (var error = new ErrorCode())
-                        {
-                            var addParams = new AddTorrentParams()
-                            {
-                                save_path = savePath,
-                            };
-                            magnet.parse_magnet_uri(torrentPath, addParams, error);
-                            using (var handle = session.add_torrent(addParams))
-                            {
-                                await HandleDownload(media, savePath, mediaType, uploadLimit, downloadLimit,
-                                    downloadProgress,
-                                    bandwidthRate, nbSeeds, nbPeers, handle, session, buffered, cancelled, cts);
-                            }
-                        }
-                    }
+                        save_path = savePath,
+                    };
+                    magnet.parse_magnet_uri(torrentPath, addParams, error);
+                    using var handle = session.add_torrent(addParams);
+                    await HandleDownload(media, savePath, mediaType, uploadLimit, downloadLimit,
+                        downloadProgress,
+                        bandwidthRate, nbSeeds, nbPeers, handle, session, buffered, cancelled, cts);
                 }
             });
         }
@@ -157,126 +150,128 @@ namespace Popcorn.Services.Download
             var mediaIndex = -1;
             long maxSize = 0;
             var filePath = string.Empty;
+            using var torrentFile = handle.torrent_file();
+            var torrentStorage = torrentFile.files();
             while (!cts.IsCancellationRequested)
             {
-                using (var status = handle.status())
+                using var status = handle.status();
+                var progress = 0d;
+                if (status.has_metadata)
                 {
-                    var progress = 0d;
-                    if (status.has_metadata)
+                    var totalSizeExceptIgnoredFiles = torrentFile.total_size();
+                    if (mediaIndex == -1 || string.IsNullOrEmpty(filePath))
                     {
-                        var numFiles = handle.torrent_file().files().num_files();
-                        var totalSizeExceptIgnoredFiles = handle.torrent_file().total_size();
-                        if (mediaIndex == -1 || string.IsNullOrEmpty(filePath))
+                        var numFiles = torrentStorage.num_files();
+                        for (var i = 0; i < numFiles; i++)
                         {
-                            for (var i = 0; i < numFiles; i++)
+                            var currentSize = torrentStorage.file_size(i);
+                            if (currentSize > maxSize)
                             {
-                                var currentSize = handle.torrent_file().files().file_size(i);
-                                if (currentSize > maxSize)
-                                {
-                                    maxSize = currentSize;
-                                    mediaIndex = i;
-                                }
+                                maxSize = currentSize;
+                                mediaIndex = i;
                             }
-
-                            for (var i = 0; i < numFiles; i++)
-                            {
-                                if (i != mediaIndex)
-                                {
-                                    handle.file_priority(i, 0);
-                                    totalSizeExceptIgnoredFiles -= handle.torrent_file().files().file_size(i);
-                                }
-                            }
-
-                            filePath = handle.torrent_file().files().file_path(mediaIndex, savePath);
                         }
 
-                        var fileProgressInBytes = handle.file_progress(1)[mediaIndex];
-                        progress = (double) fileProgressInBytes / (double) totalSizeExceptIgnoredFiles * 100d;
-                        var downRate = Math.Round(status.download_rate / 1024d, 0);
-                        var upRate = Math.Round(status.upload_rate / 1024d, 0);
-                        nbSeeds.Report(status.num_seeds);
-                        nbPeers.Report(status.num_peers);
-                        downloadProgress.Report(progress);
-                        var eta = sw.GetEta(fileProgressInBytes, totalSizeExceptIgnoredFiles);
-                        bandwidthRate.Report(new BandwidthRate
+                        for (var i = 0; i < numFiles; i++)
                         {
-                            DownloadRate = downRate,
-                            UploadRate = upRate,
-                            ETA = eta
-                        });
-
-                        ((IProgress<double>) prog).Report(progress);
-                        ((IProgress<BandwidthRate>) bandwidth).Report(new BandwidthRate
-                        {
-                            DownloadRate = downRate,
-                            UploadRate = upRate,
-                            ETA = eta
-                        });
-                    }
-
-                    double minimumBuffering;
-                    switch (type)
-                    {
-                        case MediaType.Show:
-                            minimumBuffering = Constants.MinimumShowBuffering;
-                            break;
-                        default:
-                            minimumBuffering = Constants.MinimumMovieBuffering;
-                            break;
-                    }
-
-                    if (mediaIndex != -1 && progress >= minimumBuffering && !alreadyBuffered)
-                    {
-                        buffered.Invoke();
-                        if (!string.IsNullOrEmpty(filePath))
-                        {
-                            alreadyBuffered = true;
-                            media.FilePath = filePath;
-                            BroadcastMediaBuffered(media, prog, bandwidth, playingProgress);
-                        }
-
-                        if (!alreadyBuffered)
-                        {
-                            session.remove_torrent(handle);
-                            if (type == MediaType.Unkown)
+                            if (i != mediaIndex)
                             {
-                                Messenger.Default.Send(
-                                    new UnhandledExceptionMessage(
-                                        new PopcornException(
-                                            LocalizationProviderHelper.GetLocalizedValue<string>(
-                                                "NoMediaInDroppedTorrent"))));
+                                handle.file_priority(i, 0);
+                                totalSizeExceptIgnoredFiles -= torrentStorage.file_size(i);
                             }
-                            else
-                            {
-                                Messenger.Default.Send(
-                                    new UnhandledExceptionMessage(
-                                        new PopcornException(
-                                            LocalizationProviderHelper.GetLocalizedValue<string>("NoMediaInTorrent"))));
-                            }
-
-                            break;
                         }
+
+                        var fullPath = torrentStorage.file_path(mediaIndex, savePath);
+                        var shortPath = Directory.GetParent(fullPath).FullName.GetShortPath();
+                        filePath = Path.Combine(shortPath, torrentStorage.file_name(mediaIndex));
                     }
 
-                    try
+                    var fileProgressInBytes = handle.file_progress(1)[mediaIndex];
+                    progress = (double) fileProgressInBytes / (double) totalSizeExceptIgnoredFiles * 100d;
+                    var downRate = Math.Round(status.download_rate / 1024d, 0);
+                    var upRate = Math.Round(status.upload_rate / 1024d, 0);
+                    nbSeeds.Report(status.num_seeds);
+                    nbPeers.Report(status.num_peers);
+                    downloadProgress.Report(progress);
+                    var eta = sw.GetEta(fileProgressInBytes, totalSizeExceptIgnoredFiles);
+                    bandwidthRate.Report(new BandwidthRate
                     {
-                        await Task.Delay(1000, cts.Token);
+                        DownloadRate = downRate,
+                        UploadRate = upRate,
+                        ETA = eta
+                    });
+
+                    ((IProgress<double>) prog).Report(progress);
+                    ((IProgress<BandwidthRate>) bandwidth).Report(new BandwidthRate
+                    {
+                        DownloadRate = downRate,
+                        UploadRate = upRate,
+                        ETA = eta
+                    });
+                }
+
+                double minimumBuffering;
+                switch (type)
+                {
+                    case MediaType.Show:
+                        minimumBuffering = Constants.MinimumShowBuffering;
+                        break;
+                    default:
+                        minimumBuffering = Constants.MinimumMovieBuffering;
+                        break;
+                }
+
+                if (mediaIndex != -1 && progress >= minimumBuffering && !alreadyBuffered)
+                {
+                    buffered.Invoke();
+                    if (!string.IsNullOrEmpty(filePath))
+                    {
+                        alreadyBuffered = true;
+                        media.FilePath = filePath;
+                        BroadcastMediaBuffered(media, prog, bandwidth, playingProgress);
                     }
-                    catch (Exception ex) when (ex is TaskCanceledException || ex is ObjectDisposedException)
+
+                    if (!alreadyBuffered)
                     {
-                        cancelled.Invoke();
-                        sw.Stop();
-                        try
+                        session.remove_torrent(handle);
+                        if (type == MediaType.Unkown)
                         {
-                            session.remove_torrent(handle);
+                            Messenger.Default.Send(
+                                new UnhandledExceptionMessage(
+                                    new PopcornException(
+                                        LocalizationProviderHelper.GetLocalizedValue<string>(
+                                            "NoMediaInDroppedTorrent"))));
                         }
-                        catch (Exception)
+                        else
                         {
-                            // ignored
+                            Messenger.Default.Send(
+                                new UnhandledExceptionMessage(
+                                    new PopcornException(
+                                        LocalizationProviderHelper.GetLocalizedValue<string>("NoMediaInTorrent"))));
                         }
 
                         break;
                     }
+                }
+
+                try
+                {
+                    await Task.Delay(1000, cts.Token);
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is ObjectDisposedException)
+                {
+                    cancelled.Invoke();
+                    sw.Stop();
+                    try
+                    {
+                        session.remove_torrent(handle);
+                    }
+                    catch (Exception)
+                    {
+                        // ignored
+                    }
+
+                    break;
                 }
             }
         }
