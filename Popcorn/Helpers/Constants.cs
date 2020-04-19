@@ -14,7 +14,7 @@ namespace Popcorn.Helpers
         /// <summary>
         /// App version
         /// </summary>
-        public const string AppVersion = "1.0.4";
+        public const string AppVersion = "1.0.5";
 
         /// <summary>
         /// Copyright

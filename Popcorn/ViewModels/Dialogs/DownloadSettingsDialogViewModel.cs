@@ -159,12 +159,12 @@ namespace Popcorn.ViewModels.Dialogs
                             if (Media is EpisodeShowJson)
                             {
                                 string filePath = Path.GetTempFileName();
-                                using (var session = new session())
+                                using (var session = new Session())
                                 {
-                                    var magnet = new magnet_uri();
-                                    using (var error = new error_code())
+                                    var magnet = new MagnetUri();
+                                    using (var error = new ErrorCode())
                                     {
-                                        var addParams = new add_torrent_params
+                                        var addParams = new AddTorrentParams()
                                         {
                                             save_path = filePath
                                         };
@@ -178,8 +178,8 @@ namespace Popcorn.ViewModels.Dialogs
                                                 {
                                                     ComputeTorrentHealth();
                                                     var status = handle.status();
-                                                    SelectedTorrent.Peers = status.list_peers;
-                                                    SelectedTorrent.Seeds = status.list_seeds;
+                                                    SelectedTorrent.Peers = status.num_peers;
+                                                    SelectedTorrent.Seeds = status.num_seeds;
 
                                                     await Task.Delay(1000, _computeHealthTokenSource.Token);
                                                 }

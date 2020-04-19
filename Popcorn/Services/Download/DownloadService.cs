@@ -1,5 +1,4 @@
-﻿using Popcorn.Utils;
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -62,7 +61,7 @@ namespace Popcorn.Services.Download
             {
                 Logger.Info(
                     $"Start downloading : {torrentPath}");
-                using (var session = new session())
+                using (var session = new Session())
                 {
                     downloadProgress.Report(0d);
                     bandwidthRate.Report(new BandwidthRate
@@ -88,10 +87,10 @@ namespace Popcorn.Services.Download
 
                     if (torrentType == TorrentType.File)
                     {
-                        using (var addParams = new add_torrent_params
+                        using (var addParams = new AddTorrentParams()
                         {
                             save_path = savePath,
-                            ti = new torrent_info(torrentPath)
+                            ti = new TorrentInfo(torrentPath)
                         })
                         using (var handle = session.add_torrent(addParams))
                         {
@@ -102,10 +101,10 @@ namespace Popcorn.Services.Download
                     }
                     else
                     {
-                        var magnet = new magnet_uri();
-                        using (var error = new error_code())
+                        var magnet = new MagnetUri();
+                        using (var error = new ErrorCode())
                         {
-                            var addParams = new add_torrent_params
+                            var addParams = new AddTorrentParams()
                             {
                                 save_path = savePath,
                             };
@@ -134,8 +133,8 @@ namespace Popcorn.Services.Download
         /// <param name="bandwidthRate">Download rate</param>
         /// <param name="nbSeeds">Number of seeders</param>
         /// <param name="nbPeers">Number of peers</param>
-        /// <param name="handle"><see cref="torrent_handle"/></param>
-        /// <param name="session"><see cref="session"/></param>
+        /// <param name="handle"><see cref="TorrentHandle"/></param>
+        /// <param name="session"><see cref="Session"/></param>
         /// <param name="buffered">Action to execute when media has been buffered</param>
         /// <param name="cancelled">Action to execute when media download has been cancelled</param>
         /// <param name="cts"><see cref="CancellationTokenSource"/></param>
@@ -143,8 +142,8 @@ namespace Popcorn.Services.Download
         private async Task HandleDownload(T media, string savePath, MediaType type, int uploadLimit, int downloadLimit,
             IProgress<double> downloadProgress, IProgress<BandwidthRate> bandwidthRate, IProgress<int> nbSeeds,
             IProgress<int> nbPeers,
-            torrent_handle handle,
-            session session, Action buffered, Action cancelled, CancellationTokenSource cts)
+            TorrentHandle handle,
+            Session session, Action buffered, Action cancelled, CancellationTokenSource cts)
         {
             handle.set_upload_limit(uploadLimit * 1024);
             handle.set_download_limit(downloadLimit * 1024);
@@ -167,7 +166,6 @@ namespace Popcorn.Services.Download
                     {
                         var numFiles = handle.torrent_file().files().num_files();
                         var totalSizeExceptIgnoredFiles = handle.torrent_file().total_size();
-                        handle.flush_cache();
                         if (mediaIndex == -1 || string.IsNullOrEmpty(filePath))
                         {
                             for (var i = 0; i < numFiles; i++)
@@ -239,7 +237,7 @@ namespace Popcorn.Services.Download
 
                         if (!alreadyBuffered)
                         {
-                            session.remove_torrent(handle, 0);
+                            session.remove_torrent(handle);
                             if (type == MediaType.Unkown)
                             {
                                 Messenger.Default.Send(
@@ -270,7 +268,7 @@ namespace Popcorn.Services.Download
                         sw.Stop();
                         try
                         {
-                            session.remove_torrent(handle, 1);
+                            session.remove_torrent(handle);
                         }
                         catch (Exception)
                         {

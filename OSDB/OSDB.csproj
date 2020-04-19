@@ -7,7 +7,7 @@
     <Product>Popcorn</Product>
     <Copyright>Copyright © 2019</Copyright>
     <OutputPath>bin\$(Platform)\$(Configuration)\</OutputPath>
-    <Platforms>x86</Platforms>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NChardet" Version="1.0.1.6" />
