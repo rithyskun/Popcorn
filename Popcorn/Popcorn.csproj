@@ -87,7 +87,7 @@
     <PackageReference Include="Humanizer.Core.zh-Hans" Version="2.7.9" />
     <PackageReference Include="Humanizer.Core.zh-Hant" Version="2.7.9" />
     <PackageReference Include="libtorrent-net" Version="6.0.0" />
-    <PackageReference Include="LoadingIndicators.WPF" Version="0.0.1" />
+    <PackageReference Include="LoadingIndicators.WPF.Core.Temporary" Version="1.0.1" />
     <PackageReference Include="MahApps.Metro" Version="2.0.0-alpha0748" />
     <PackageReference Include="MahApps.Metro.IconPacks" Version="3.7.0" />
     <PackageReference Include="Microsoft.WindowsAPICodePack-Core" Version="1.1.0.2" />
